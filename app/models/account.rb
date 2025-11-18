@@ -108,6 +108,7 @@ class Account < ApplicationRecord
   before_validation :validate_limit_keys
   after_create_commit :notify_creation
   after_destroy :remove_account_sequences
+  before_save :sync_printhouse_id_from_custom_attributes
 
   def agents
     users.where(account_users: { role: :agent })
@@ -174,6 +175,13 @@ class Account < ApplicationRecord
 
   def validate_limit_keys
     # method overridden in enterprise module
+  end
+  # GoMake: Sync printhouse_id from custom_attributes
+  def sync_printhouse_id_from_custom_attributes
+    return unless custom_attributes.is_a?(Hash)
+    
+    printhouse_id_value = custom_attributes['printHouseId'] || custom_attributes[:printHouseId]
+    self.printhouse_id = printhouse_id_value if printhouse_id_value.present?
   end
 
   def remove_account_sequences

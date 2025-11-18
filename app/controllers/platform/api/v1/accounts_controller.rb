@@ -7,6 +7,17 @@ class Platform::Api::V1::AccountsController < PlatformController
   end
 
   def show; end
+  # GoMake: Find account by printhouse_id
+  def find_by_printhouse
+    printhouse_id = params[:printhouse_id]
+    @resource = Account.find_by(printhouse_id: printhouse_id)
+    
+    if @resource
+      render :show
+    else
+      render json: { error: 'Account not found' }, status: :not_found
+    end
+  end
 
   def create
     @resource = Account.create!(account_params)
