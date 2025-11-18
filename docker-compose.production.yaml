@@ -13,7 +13,7 @@ services:
       - postgres
       - redis
     ports:
-      - '127.0.0.1:3000:3000'
+      - '3001:3000'
     environment:
       - NODE_ENV=production
       - RAILS_ENV=production
@@ -38,14 +38,13 @@ services:
     image: pgvector/pgvector:pg16
     restart: always
     ports:
-      - '127.0.0.1:5432:5432'
+      - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    env_file: .env
     environment:
       - POSTGRES_DB=chatwoot
       - POSTGRES_USER=postgres
-      # Please provide your own password.
-      - POSTGRES_PASSWORD=
 
   redis:
     image: redis:alpine
@@ -55,7 +54,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - '127.0.0.1:6379:6379'
+      - '6380:6379'
 
 volumes:
   storage_data:
