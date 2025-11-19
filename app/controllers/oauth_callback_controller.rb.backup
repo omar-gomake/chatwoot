@@ -10,24 +10,7 @@ class OauthCallbackController < ApplicationController
     ChatwootExceptionTracker.new(e).capture_exception
     Rails.logger.error "OAuth Callback Error: #{e.message}"
     Rails.logger.error "Backtrace: #{e.backtrace.join("\n")}"
-    
-    # Try to load account/frontend_url from state if possible
-    begin
-      account_from_signed_id
-    rescue StandardError
-      # Ignore if state parsing fails
-    end
-    
-    if @frontend_url.present?
-      # Redirect to NestJS proxy with error
-      proxy_base_url = ENV.fetch('PROXY_BASE_URL', ENV.fetch('FRONTEND_URL', 'http://localhost:3000'))
-      error_url = "#{proxy_base_url}/api/integrations/#{provider_name}/callback/success?frontend_url=#{CGI.escape(@frontend_url)}&error=#{CGI.escape(e.message)}"
-      
-      Rails.logger.info "OAuth Callback Error - Redirecting to NestJS proxy with error: #{error_url}"
-      redirect_to error_url, allow_other_host: true
-    else
-      redirect_to '/'
-    end
+    redirect_to '/'
   end
 
   private
@@ -35,39 +18,18 @@ class OauthCallbackController < ApplicationController
   def handle_response
     inbox, already_exists = find_or_create_inbox
 
-    # Check if frontend_url exists (from our NestJS proxy)
-    if @frontend_url.present?
-      # Redirect to NestJS proxy success callback
-      proxy_base_url = ENV.fetch('PROXY_BASE_URL', ENV.fetch('FRONTEND_URL', 'http://localhost:3000'))
-      
-      Rails.logger.info "OAuth Callback - Frontend URL from state: #{@frontend_url}"
-      Rails.logger.info "OAuth Callback - Redirecting to NestJS proxy: #{proxy_base_url}"
-      Rails.logger.info "OAuth Callback - Account ID: #{account.id}, Inbox ID: #{inbox.id}, New: #{!already_exists}"
+    # Use frontend_url from state if available, otherwise fallback to ENV
+    frontend_base_url = @frontend_url || ENV.fetch('FRONTEND_URL', 'http://localhost:3000')
+    
+    Rails.logger.info "OAuth Callback - Frontend URL from state: #{@frontend_url}"
+    Rails.logger.info "OAuth Callback - Final redirect URL: #{frontend_base_url}"
+    Rails.logger.info "OAuth Callback - Account ID: #{account.id}"
+    Rails.logger.info "OAuth Callback - Inbox ID: #{inbox.id}"
 
-      # Build proxy callback URL with all necessary parameters
-      callback_params = {
-        frontend_url: @frontend_url,
-        account_id: account.id,
-        inbox_id: inbox.id,
-        new: !already_exists
-      }
-      
-      proxy_callback_url = "#{proxy_base_url}/api/integrations/#{provider_name}/callback/success?#{callback_params.to_query}"
-      
-      Rails.logger.info "OAuth Callback - Full redirect URL: #{proxy_callback_url}"
-      redirect_to proxy_callback_url, allow_other_host: true
+    if already_exists
+      redirect_to "#{frontend_base_url}/app/accounts/#{account.id}/settings/inboxes/#{inbox.id}"
     else
-      # Fallback to original behavior (direct to Chatwoot dashboard)
-      frontend_base_url = ENV.fetch('FRONTEND_URL', 'http://localhost:3000')
-      
-      Rails.logger.info "OAuth Callback - No frontend_url in state, using default: #{frontend_base_url}"
-      Rails.logger.info "OAuth Callback - Account ID: #{account.id}, Inbox ID: #{inbox.id}"
-
-      if already_exists
-        redirect_to "#{frontend_base_url}/app/accounts/#{account.id}/settings/inboxes/#{inbox.id}"
-      else
-        redirect_to "#{frontend_base_url}/app/accounts/#{account.id}/settings/inboxes/new/#{inbox.id}/agents"
-      end
+      redirect_to "#{frontend_base_url}/app/accounts/#{account.id}/settings/inboxes/new/#{inbox.id}/agents"
     end
   end
 
@@ -76,9 +38,7 @@ class OauthCallbackController < ApplicationController
     # we need this value to know where to redirect on sucessful processing of the callback
     channel_exists = channel_email.present?
 
-    if channel_email.nil?
-      channel_email = create_channel_with_inbox
-    end
+    channel_email ||= create_channel_with_inbox
     update_channel(channel_email)
 
     # reauthorize channel, this code path only triggers when microsoft auth is successful
@@ -175,9 +135,9 @@ class OauthCallbackController < ApplicationController
   end
 
   def base_url
-    # Use FRONTEND_URL for OAuth redirect_uri (always points to Chatwoot)
-    # This is the URL Google/Microsoft will redirect back to
-    ENV.fetch('FRONTEND_URL', 'http://localhost:3000')
+    # Use frontend_url from state if available during OAuth flow
+    # Otherwise use ENV variable
+    @frontend_url || ENV.fetch('FRONTEND_URL', 'http://localhost:3000')
   end
 
   def parsed_body

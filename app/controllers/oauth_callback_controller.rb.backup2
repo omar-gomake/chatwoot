@@ -10,24 +10,7 @@ class OauthCallbackController < ApplicationController
     ChatwootExceptionTracker.new(e).capture_exception
     Rails.logger.error "OAuth Callback Error: #{e.message}"
     Rails.logger.error "Backtrace: #{e.backtrace.join("\n")}"
-    
-    # Try to load account/frontend_url from state if possible
-    begin
-      account_from_signed_id
-    rescue StandardError
-      # Ignore if state parsing fails
-    end
-    
-    if @frontend_url.present?
-      # Redirect to NestJS proxy with error
-      proxy_base_url = ENV.fetch('PROXY_BASE_URL', ENV.fetch('FRONTEND_URL', 'http://localhost:3000'))
-      error_url = "#{proxy_base_url}/api/integrations/#{provider_name}/callback/success?frontend_url=#{CGI.escape(@frontend_url)}&error=#{CGI.escape(e.message)}"
-      
-      Rails.logger.info "OAuth Callback Error - Redirecting to NestJS proxy with error: #{error_url}"
-      redirect_to error_url, allow_other_host: true
-    else
-      redirect_to '/'
-    end
+    redirect_to '/'
   end
 
   private
@@ -76,9 +59,7 @@ class OauthCallbackController < ApplicationController
     # we need this value to know where to redirect on sucessful processing of the callback
     channel_exists = channel_email.present?
 
-    if channel_email.nil?
-      channel_email = create_channel_with_inbox
-    end
+    channel_email ||= create_channel_with_inbox
     update_channel(channel_email)
 
     # reauthorize channel, this code path only triggers when microsoft auth is successful
